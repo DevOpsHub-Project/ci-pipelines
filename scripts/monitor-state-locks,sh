@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Monitor Terraform state locks
+TABLE_NAME="devopshub-tf-locks"
+
+echo "Checking for active Terraform state locks..."
+
+# Get all items from DynamoDB table
+LOCKS=$(aws dynamodb scan --table-name $TABLE_NAME --query 'Items[*].{LockID:LockID.S,Info:Info.S}' --output json)
+
+if [ "$LOCKS" = "[]" ]; then
+	echo "No active locks found"
+else
+	echo "Active locks found:"
+	echo $LOCKS | jq -r '.[] | "Lock ID: \(.LockID)\nInfo: \(.Info)\n---"'
+				    
+	# Optional: Force unlock (use with caution)
+	read -p "Force unlock all locks? (y/N): " -n 1 -r
+	echo
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+			aws dynamodb scan --table-name $TABLE_NAME --query 'Items[*].LockID.S' --output text | \
+			xargs -I {} aws dynamodb delete-item --table-name $TABLE_NAME --key '{"LockID":{"S":"{}"}}'
+			echo "All locks removed"
+	fi
+fi
